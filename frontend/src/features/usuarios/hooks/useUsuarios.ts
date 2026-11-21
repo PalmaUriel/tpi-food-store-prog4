@@ -1,0 +1,24 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { activarUsuario, desactivarUsuario, getUsuarios } from "../api/usuarios";
+
+export const usuariosKey = ["usuarios"] as const;
+
+export function useUsuarios() {
+  return useQuery({ queryKey: usuariosKey, queryFn: getUsuarios });
+}
+
+export function useActivarUsuario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => activarUsuario(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: usuariosKey }),
+  });
+}
+
+export function useDesactivarUsuario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => desactivarUsuario(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: usuariosKey }),
+  });
+}
