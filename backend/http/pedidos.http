@@ -1,0 +1,167 @@
+### =========================================================
+### TPI Food Store — Pedidos y reglas de negocio (RN-01 a RN-06)
+### Antes: ejecutar catalogo.http (crea la categoría y los productos)
+###        y auth.http (crea al usuario "uriel")
+### =========================================================
+@base = http://localhost:8000/api/v1
+
+### ---------- Preparación (como admin) ----------
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=Admin1234!
+
+### Producto A: stock 10
+# @name prodA
+POST {{base}}/productos
+Content-Type: application/json
+
+{ "nombre": "Empanada de carne", "precio_base": 1500, "stock": 10, "categoria_id": 1 }
+
+### Producto B: stock 2
+# @name prodB
+POST {{base}}/productos
+Content-Type: application/json
+
+{ "nombre": "Flan casero", "precio_base": 2500, "stock": 2, "categoria_id": 1 }
+
+### ---------- Como cliente ----------
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=uriel&password=secreto123
+
+### 1. RN-01: crear pedido -> 201, PENDIENTE, total = Σ subtotales, descuenta stock
+# @name pedido1
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{
+  "items": [
+    { "producto_id": {{prodA.response.body.$.id}}, "cantidad": 3 },
+    { "producto_id": {{prodB.response.body.$.id}}, "cantidad": 1 }
+  ],
+  "forma_pago": "EFECTIVO",
+  "direccion_entrega": "Av. Siempre Viva 742",
+  "notas": "Tocar timbre 2B"
+}
+
+### 2. Verificar stock: A pasó de 10 a 7, B de 2 a 1
+GET {{base}}/productos/{{prodA.response.body.$.id}}
+
+### 3. RN-01 todo o nada: A tiene stock, B no alcanza -> 400 y A NO se descuenta
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{
+  "items": [
+    { "producto_id": {{prodA.response.body.$.id}}, "cantidad": 1 },
+    { "producto_id": {{prodB.response.body.$.id}}, "cantidad": 50 }
+  ],
+  "forma_pago": "EFECTIVO",
+  "direccion_entrega": "Av. Siempre Viva 742"
+}
+
+### 4. A sigue en 7 (se hizo rollback de todo)
+GET {{base}}/productos/{{prodA.response.body.$.id}}
+
+### 5. Producto repetido -> 400
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{
+  "items": [
+    { "producto_id": {{prodA.response.body.$.id}}, "cantidad": 1 },
+    { "producto_id": {{prodA.response.body.$.id}}, "cantidad": 2 }
+  ],
+  "forma_pago": "EFECTIVO",
+  "direccion_entrega": "Av. Siempre Viva 742"
+}
+
+### 6. Producto inexistente -> 404
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{ "items": [{ "producto_id": 9999, "cantidad": 1 }], "forma_pago": "EFECTIVO", "direccion_entrega": "Av. Siempre Viva 742" }
+
+### 7. RN-06: forma de pago inválida y dirección corta -> 422
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{ "items": [{ "producto_id": {{prodA.response.body.$.id}}, "cantidad": 1 }], "forma_pago": "TARJETA", "direccion_entrega": "abc" }
+
+### 8. RN-04: mis pedidos (el cliente solo ve los suyos)
+GET {{base}}/pedidos
+
+### 9. Detalle de mi pedido
+GET {{base}}/pedidos/{{pedido1.response.body.$.id}}
+
+### 10. El cliente no puede ver el resumen ni cambiar estados -> 403
+GET {{base}}/pedidos/resumen
+
+###
+PATCH {{base}}/pedidos/{{pedido1.response.body.$.id}}/estado
+Content-Type: application/json
+
+{ "estado": "EN_PREPARACION" }
+
+### 11. Otro pedido, para cancelarlo
+# @name pedido2
+POST {{base}}/pedidos
+Content-Type: application/json
+
+{ "items": [{ "producto_id": {{prodA.response.body.$.id}}, "cantidad": 2 }], "forma_pago": "TRANSFERENCIA", "direccion_entrega": "San Martín 1234" }
+
+### 12. RN-03 y RN-04: el dueño cancela en PENDIENTE -> 200 y A recupera 2 unidades
+PATCH {{base}}/pedidos/{{pedido2.response.body.$.id}}/cancelar
+
+###
+GET {{base}}/productos/{{prodA.response.body.$.id}}
+
+### 13. Cancelar otra vez -> 400 (ya no está PENDIENTE)
+PATCH {{base}}/pedidos/{{pedido2.response.body.$.id}}/cancelar
+
+### ---------- Como admin: máquina de estados ----------
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=Admin1234!
+
+### 14. Ve todos los pedidos, con filtro por estado
+GET {{base}}/pedidos?estado=PENDIENTE
+
+### 15. RN-02: saltear un estado (PENDIENTE -> ENTREGADO) -> 400
+PATCH {{base}}/pedidos/{{pedido1.response.body.$.id}}/estado
+Content-Type: application/json
+
+{ "estado": "ENTREGADO" }
+
+### 16. PENDIENTE -> EN_PREPARACION -> 200
+PATCH {{base}}/pedidos/{{pedido1.response.body.$.id}}/estado
+Content-Type: application/json
+
+{ "estado": "EN_PREPARACION" }
+
+### 17. EN_PREPARACION -> ENTREGADO -> 200
+PATCH {{base}}/pedidos/{{pedido1.response.body.$.id}}/estado
+Content-Type: application/json
+
+{ "estado": "ENTREGADO" }
+
+### 18. ENTREGADO es terminal: no se puede cancelar -> 400
+PATCH {{base}}/pedidos/{{pedido1.response.body.$.id}}/estado
+Content-Type: application/json
+
+{ "estado": "CANCELADO" }
+
+### 19. RN-05: cambiar el precio del producto NO cambia el pedido ya hecho
+PUT {{base}}/productos/{{prodA.response.body.$.id}}
+Content-Type: application/json
+
+{ "precio_base": 99999 }
+
+###
+GET {{base}}/pedidos/{{pedido1.response.body.$.id}}
+
+### 20. Resumen del panel
+GET {{base}}/pedidos/resumen

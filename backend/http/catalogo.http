@@ -1,0 +1,136 @@
+### =========================================================
+### TPI Food Store — Catálogo: categorías y productos
+### Requiere: python -m app.db.seed  (admin / Admin1234!)
+### =========================================================
+@base = http://localhost:8000/api/v1
+
+### 0. Login como admin (las escrituras exigen rol admin)
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=Admin1234!
+
+### ---------------- CATEGORÍAS ----------------
+
+### 1. Crear -> 201
+# @name pizzas
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Pizzas", "descripcion": "A la piedra" }
+
+### 2. Crear otra -> 201
+# @name bebidas
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Bebidas" }
+
+### 3. Nombre repetido (sin importar mayúsculas) -> 409
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "PIZZAS" }
+
+### 4. Nombre de 1 carácter -> 422
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "P" }
+
+### 5. Listado público (solo activas)
+GET {{base}}/categorias
+
+### 6. Actualización parcial: solo la descripción -> 200
+PUT {{base}}/categorias/{{pizzas.response.body.$.id}}
+Content-Type: application/json
+
+{ "descripcion": "Masa madre, a la piedra" }
+
+### ---------------- PRODUCTOS ----------------
+
+### 7. Crear -> 201 (incluye la categoría en la respuesta)
+# @name muzza
+POST {{base}}/productos
+Content-Type: application/json
+
+{
+  "nombre": "Pizza Muzzarella",
+  "descripcion": "Salsa de tomate y muzzarella",
+  "precio_base": 8500,
+  "imagen_url": "https://images.unsplash.com/photo-1513104890138-7c749659a591",
+  "stock": 10,
+  "categoria_id": {{pizzas.response.body.$.id}}
+}
+
+### 8. Crear otro -> 201
+POST {{base}}/productos
+Content-Type: application/json
+
+{ "nombre": "Coca Cola 1.5L", "precio_base": 3200, "stock": 24, "categoria_id": {{bebidas.response.body.$.id}} }
+
+### 9. Categoría inexistente -> 404
+POST {{base}}/productos
+Content-Type: application/json
+
+{ "nombre": "X", "precio_base": 100, "categoria_id": 999 }
+
+### 10. Precio negativo -> 422
+POST {{base}}/productos
+Content-Type: application/json
+
+{ "nombre": "X", "precio_base": -1, "categoria_id": {{pizzas.response.body.$.id}} }
+
+### 11. Listado paginado público -> { "total": N, "items": [...] }
+GET {{base}}/productos?skip=0&limit=20
+
+### 12. Búsqueda por nombre (sin distinguir mayúsculas)
+GET {{base}}/productos?search=PIZZA
+
+### 13. Filtro por categoría
+GET {{base}}/productos?categoria_id={{bebidas.response.body.$.id}}
+
+### 14. limit mayor a 100 -> 422
+GET {{base}}/productos?limit=101
+
+### 15. Detalle con su categoría
+GET {{base}}/productos/{{muzza.response.body.$.id}}
+
+### 16. PUT parcial: solo el precio -> 200
+PUT {{base}}/productos/{{muzza.response.body.$.id}}
+Content-Type: application/json
+
+{ "precio_base": 9000 }
+
+### 17. PATCH de stock y disponibilidad -> 200
+PATCH {{base}}/productos/{{muzza.response.body.$.id}}/stock
+Content-Type: application/json
+
+{ "stock": 0, "disponible": false }
+
+### 18. Filtro por disponibilidad
+GET {{base}}/productos?disponible=false
+
+### 19. Baja lógica -> 204
+DELETE {{base}}/productos/{{muzza.response.body.$.id}}
+
+### 20. Detalle de un producto dado de baja -> 404
+GET {{base}}/productos/{{muzza.response.body.$.id}}
+
+### 21. Baja lógica de categoría -> 204 (sus productos siguen visibles)
+DELETE {{base}}/categorias/{{bebidas.response.body.$.id}}
+
+### 22. Crear una categoría con el nombre de una dada de baja -> 409 (no libera el nombre)
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Bebidas" }
+
+### 23. Sin sesión: crear -> 401
+POST {{base}}/auth/logout
+
+###
+POST {{base}}/categorias
+Content-Type: application/json
+
+{ "nombre": "Sin sesión" }

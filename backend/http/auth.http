@@ -1,0 +1,86 @@
+### =========================================================
+### TPI Food Store — Auth y usuarios
+### Requiere: python -m app.db.seed  (crea admin / Admin1234!)
+### =========================================================
+@base = http://localhost:8000/api/v1
+
+### 1. Registro público -> 201, role "user"
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "uriel", "full_name": "Uriel Palma", "email": "uriel@test.com", "password": "secreto123" }
+
+### 2. Username repetido -> 409
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "uriel", "full_name": "Otro", "email": "otro@test.com", "password": "secreto123" }
+
+### 3. Email repetido -> 409
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "otro", "full_name": "Otro", "email": "uriel@test.com", "password": "secreto123" }
+
+### 4. Datos inválidos (email mal, contraseña corta) -> 422
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{ "username": "ab", "full_name": "", "email": "no-es-email", "password": "123" }
+
+### 5. Login con contraseña incorrecta -> 401
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=uriel&password=incorrecta
+
+### 6. Login como user -> 200 {"message": "Login exitoso"} + Set-Cookie HttpOnly
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=uriel&password=secreto123
+
+### 7. Perfil -> 200 UserPublic (sin hashed_password)
+GET {{base}}/auth/me
+
+### 8. Listado de usuarios como user -> 403
+GET {{base}}/admin/usuarios
+
+### 9. Login como admin
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=Admin1234!
+
+### 10. Listado de usuarios -> 200
+GET {{base}}/admin/usuarios
+
+### 11. Desactivar al usuario 2 -> 200, disabled: true (repetirlo también da 200)
+POST {{base}}/admin/usuarios/2/desactivar
+
+### 12. Desactivarse a sí mismo (admin = id 1) -> 400
+POST {{base}}/admin/usuarios/1/desactivar
+
+### 13. Usuario inexistente -> 404
+POST {{base}}/admin/usuarios/999/activar
+
+### 14. Login del usuario desactivado -> 400 "Cuenta de usuario desactivada"
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=uriel&password=secreto123
+
+### 15. Volver a iniciar como admin y activar al usuario 2 -> 200, disabled: false
+POST {{base}}/auth/token
+Content-Type: application/x-www-form-urlencoded
+
+username=admin&password=Admin1234!
+
+###
+POST {{base}}/admin/usuarios/2/activar
+
+### 16. Logout -> 200 y la cookie se borra
+POST {{base}}/auth/logout
+
+### 17. Perfil sin sesión -> 401
+GET {{base}}/auth/me

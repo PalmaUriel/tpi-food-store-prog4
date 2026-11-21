@@ -1,0 +1,17 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.db
+
+# Node
+node_modules/
+dist/
+
+# Variables de entorno (los .env.example SÍ se suben)
+.env
+
+# Editor / sistema
+.vscode/
+.DS_Store
